@@ -1,0 +1,9 @@
+---
+- name: Deploy Cloud-1 WordPress stack
+  hosts: webserver
+  become: true
+  roles:
+    - docker
+    - firewall
+    - tls
+    - wordpress

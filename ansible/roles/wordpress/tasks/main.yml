@@ -1,0 +1,44 @@
+---
+- name: Create app directory
+  file:
+    path: "{{ app_dir }}"
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Create certs directory (used later for TLS)
+  file:
+    path: "{{ app_dir }}/certs"
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Template docker-compose.yml
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ app_dir }}/docker-compose.yml"
+    mode: "0644"
+  become: true
+
+- name: Template nginx.conf
+  template:
+    src: nginx.conf.j2
+    dest: "{{ app_dir }}/nginx.conf"
+    mode: "0644"
+  become: true
+  notify: Restart nginx container
+
+- name: Pull latest images
+  command: docker compose pull
+  args:
+    chdir: "{{ app_dir }}"
+  become: true
+  changed_when: false
+
+- name: Bring up the stack
+  command: docker compose up -d
+  args:
+    chdir: "{{ app_dir }}"
+  become: true
+  register: compose_up
+  changed_when: true

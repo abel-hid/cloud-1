@@ -1,0 +1,35 @@
+---
+- name: Create certs directory
+  file:
+    path: "{{ app_dir }}/certs"
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Check if private key already exists
+  stat:
+    path: "{{ app_dir }}/certs/privkey.pem"
+  register: privkey_stat
+  become: true
+
+- name: Generate self-signed private key
+  command: >
+    openssl genrsa -out {{ app_dir }}/certs/privkey.pem 2048
+  become: true
+  when: not privkey_stat.stat.exists
+
+- name: Check if certificate already exists
+  stat:
+    path: "{{ app_dir }}/certs/fullchain.pem"
+  register: cert_stat
+  become: true
+
+- name: Generate self-signed certificate
+  command: >
+    openssl req -x509 -new -nodes
+    -key {{ app_dir }}/certs/privkey.pem
+    -out {{ app_dir }}/certs/fullchain.pem
+    -days 365
+    -subj "/CN={{ domain_name }}"
+  become: true
+  when: not cert_stat.stat.exists

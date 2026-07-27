@@ -1,0 +1,6 @@
+---
+- name: Restart nginx container
+  command: docker compose restart nginx
+  args:
+    chdir: "{{ app_dir }}"
+  become: true
