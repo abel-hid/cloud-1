@@ -6,23 +6,26 @@
     mode: "0755"
   become: true
 
-- name: Check if private key already exists
+# --- Self-signed path (local dev) ---
+- name: Check if self-signed private key already exists
   stat:
     path: "{{ app_dir }}/certs/privkey.pem"
   register: privkey_stat
   become: true
+  when: not use_letsencrypt
 
 - name: Generate self-signed private key
   command: >
     openssl genrsa -out {{ app_dir }}/certs/privkey.pem 2048
   become: true
-  when: not privkey_stat.stat.exists
+  when: not use_letsencrypt and not privkey_stat.stat.exists
 
-- name: Check if certificate already exists
+- name: Check if self-signed certificate already exists
   stat:
     path: "{{ app_dir }}/certs/fullchain.pem"
   register: cert_stat
   become: true
+  when: not use_letsencrypt
 
 - name: Generate self-signed certificate
   command: >
@@ -32,4 +35,52 @@
     -days 365
     -subj "/CN={{ domain_name }}"
   become: true
-  when: not cert_stat.stat.exists
+  when: not use_letsencrypt and not cert_stat.stat.exists
+
+# --- Let's Encrypt path (real domain) ---
+- name: Install certbot
+  apt:
+    name: certbot
+    state: present
+  become: true
+  when: use_letsencrypt
+
+- name: Check if Let's Encrypt certificate already exists
+  stat:
+    path: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
+  register: le_cert_stat
+  become: true
+  when: use_letsencrypt
+
+- name: Stop nginx temporarily to free port 80 for certbot
+  command: docker compose stop nginx
+  args:
+    chdir: "{{ app_dir }}"
+  become: true
+  when: use_letsencrypt and not le_cert_stat.stat.exists
+  ignore_errors: true
+
+- name: Obtain Let's Encrypt certificate via standalone mode
+  command: >
+    certbot certonly --standalone
+    -d {{ domain_name }}
+    --non-interactive --agree-tos
+    -m {{ letsencrypt_email }}
+  become: true
+  when: use_letsencrypt and not le_cert_stat.stat.exists
+
+- name: Copy Let's Encrypt fullchain into app certs directory
+  copy:
+    src: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
+    dest: "{{ app_dir }}/certs/fullchain.pem"
+    remote_src: true
+  become: true
+  when: use_letsencrypt
+
+- name: Copy Let's Encrypt privkey into app certs directory
+  copy:
+    src: "/etc/letsencrypt/live/{{ domain_name }}/privkey.pem"
+    dest: "{{ app_dir }}/certs/privkey.pem"
+    remote_src: true
+  become: true
+  when: use_letsencrypt

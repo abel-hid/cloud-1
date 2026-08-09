@@ -1,9 +1,10 @@
 ---
 app_dir: /opt/cloud1
-domain_name: cloud1.local
+domain_name: abel-hid.duckdns.org
 
 mysql_database: wordpress
 mysql_user: wp_user
 
 mysql_root_password: "{{ vault_mysql_root_password }}"
 mysql_password: "{{ vault_mysql_password }}"
+letsencrypt_email: abdeljalilelhidaoui21@gmail.com
