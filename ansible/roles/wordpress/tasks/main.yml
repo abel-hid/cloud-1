@@ -1,44 +1,127 @@
 ---
-- name: Create app directory
-  file:
+# This role writes the runtime files, starts the complete Compose stack, waits for
+# the database/files to be ready, then performs the first WordPress installation.
+
+- name: Create application directory
+  ansible.builtin.file:
     path: "{{ app_dir }}"
     state: directory
     mode: "0755"
   become: true
 
-- name: Create certs directory (used later for TLS)
-  file:
+- name: Keep certificate directory present
+  ansible.builtin.file:
     path: "{{ app_dir }}/certs"
     state: directory
     mode: "0755"
   become: true
 
-- name: Template docker-compose.yml
-  template:
+# The rendered Compose file contains database passwords from Ansible Vault.
+# 0600 limits it to root, and diff:false prevents `ansible-playbook --diff` from
+# printing those secrets to the terminal.
+- name: Render docker-compose.yml
+  ansible.builtin.template:
     src: docker-compose.yml.j2
     dest: "{{ app_dir }}/docker-compose.yml"
-    mode: "0644"
+    mode: "0600"
+  diff: false
   become: true
 
-- name: Template nginx.conf
-  template:
+- name: Render Nginx configuration
+  ansible.builtin.template:
     src: nginx.conf.j2
     dest: "{{ app_dir }}/nginx.conf"
     mode: "0644"
   become: true
   notify: Restart nginx container
 
-- name: Pull latest images
-  command: docker compose pull
+# `docker compose up -d` creates missing containers and leaves already-correct
+# containers running. Looking at Compose's output keeps the second run from being
+# reported as changed when nothing was recreated/started.
+- name: Start all long-running containers
+  ansible.builtin.command: docker compose up -d
   args:
     chdir: "{{ app_dir }}"
-  become: true
-  changed_when: false
-
-- name: Bring up the stack
-  command: docker compose up -d
-  args:
-    chdir: "{{ app_dir }}"
-  become: true
   register: compose_up
-  changed_when: true
+  changed_when: >-
+    'Created' in compose_up.stderr or
+    'Recreated' in compose_up.stderr or
+    'Started' in compose_up.stderr
+  become: true
+
+# The MySQL image may need a few seconds after the container starts. The password
+# is read from the container's own environment, so it is not written in this task.
+- name: Wait until MySQL accepts connections
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - exec
+      - -T
+      - mysql
+      - sh
+      - -c
+      - 'mysqladmin ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD" --silent'
+  args:
+    chdir: "{{ app_dir }}"
+  register: mysql_ready
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: mysql_ready.rc == 0
+  become: true
+
+# WordPress copies its application files into the persistent volume on first boot.
+# Wait for wp-config.php before running the one-shot WP-CLI container.
+- name: Wait until WordPress files are initialized
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - exec
+      - -T
+      - wordpress
+      - test
+      - -f
+      - /var/www/html/wp-config.php
+  args:
+    chdir: "{{ app_dir }}"
+  register: wordpress_files
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: wordpress_files.rc == 0
+  become: true
+
+# `core is-installed` returns 0 only after WordPress database tables exist.
+# failed_when:false is intentional: a non-zero first run simply means we need the
+# next installation task; it is not an Ansible deployment failure.
+- name: Check whether WordPress is already installed
+  ansible.builtin.command: >-
+    docker compose --profile tools run --rm wpcli
+    wp core is-installed --path=/var/www/html
+  args:
+    chdir: "{{ app_dir }}"
+  register: wordpress_installed
+  changed_when: false
+  failed_when: false
+  become: true
+
+# The password comes from encrypted Ansible Vault. no_log prevents it from being
+# exposed in Ansible output/history while WP-CLI creates the initial site.
+- name: Install the initial WordPress site
+  ansible.builtin.command: >-
+    docker compose --profile tools run --rm wpcli
+    wp core install
+    --path=/var/www/html
+    --url={{ site_scheme }}://{{ domain_name }}
+    --title={{ wordpress_title | quote }}
+    --admin_user={{ wordpress_admin_user | quote }}
+    --admin_password={{ wordpress_admin_password | quote }}
+    --admin_email={{ wordpress_admin_email | quote }}
+    --skip-email
+  args:
+    chdir: "{{ app_dir }}"
+  when: wordpress_installed.rc != 0
+  no_log: true
+  become: true

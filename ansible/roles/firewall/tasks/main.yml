@@ -1,44 +1,40 @@
 ---
-- name: Install ufw
-  apt:
+# UFW is configured with only the three ports allowed by the subject.
+# Docker publishes only 80/443, while MySQL stays on a private Docker network.
+
+- name: Install UFW
+  ansible.builtin.apt:
     name: ufw
     state: present
   become: true
 
-- name: Set default policy to deny incoming
-  community.general.ufw:
-    direction: incoming
-    policy: deny
+# These commands describe the desired policy. Repeating them leaves the same
+# firewall state, which is what matters for idempotent provisioning.
+- name: Deny incoming connections by default
+  ansible.builtin.command: ufw default deny incoming
+  changed_when: false
   become: true
 
-- name: Set default policy to allow outgoing
-  community.general.ufw:
-    direction: outgoing
-    policy: allow
+- name: Allow outgoing connections by default
+  ansible.builtin.command: ufw default allow outgoing
+  changed_when: false
   become: true
 
-- name: Allow SSH (port 22)
-  community.general.ufw:
-    rule: allow
-    port: "22"
-    proto: tcp
+# UFW itself detects duplicate rules. The changed_when expression keeps Ansible
+# from reporting an existing rule as a new change on the second deployment.
+- name: Allow only SSH, HTTP and HTTPS from outside
+  ansible.builtin.command: "ufw allow {{ item }}/tcp"
+  loop:
+    - "22"
+    - "80"
+    - "443"
+  register: ufw_rule
+  changed_when: "'Skipping adding existing rule' not in ufw_rule.stdout"
   become: true
 
-- name: Allow HTTP (port 80)
-  community.general.ufw:
-    rule: allow
-    port: "80"
-    proto: tcp
-  become: true
-
-- name: Allow HTTPS (port 443)
-  community.general.ufw:
-    rule: allow
-    port: "443"
-    proto: tcp
-  become: true
-
-- name: Enable ufw
-  community.general.ufw:
-    state: enabled
+# --force avoids the interactive "may disrupt SSH" prompt. Port 22 is already
+# allowed above, so enabling the firewall does not lock out the deployment user.
+- name: Enable UFW
+  ansible.builtin.command: ufw --force enable
+  changed_when: false
   become: true

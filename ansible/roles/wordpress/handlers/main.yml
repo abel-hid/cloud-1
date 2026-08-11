@@ -1,6 +1,8 @@
 ---
+# Handlers run only when notified. Nginx therefore restarts only when its rendered
+# configuration actually changes, not on every idempotent Ansible run.
 - name: Restart nginx container
-  command: docker compose restart nginx
+  ansible.builtin.command: docker compose restart nginx
   args:
     chdir: "{{ app_dir }}"
   become: true
