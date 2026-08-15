@@ -1,7 +1,5 @@
 app_dir: /opt/cloud1
 
-domain_name: "{{ ansible_host | default(inventory_hostname) }}"
-
 use_letsencrypt: false
 
 site_scheme: "{{ 'https' if use_letsencrypt else 'http' }}"

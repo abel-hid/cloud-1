@@ -3,7 +3,6 @@
     path: "{{ app_dir }}"
     state: directory
     mode: "0755"
-  become: true
   when: use_letsencrypt
 
 - name: Create certificate directory
@@ -11,35 +10,30 @@
     path: "{{ app_dir }}/certs"
     state: directory
     mode: "0755"
-  become: true
   when: use_letsencrypt
 
 - name: Install Certbot
   ansible.builtin.apt:
     name: certbot
     state: present
-  become: true
   when: use_letsencrypt
 
 - name: Check whether Let's Encrypt certificate already exists
   ansible.builtin.stat:
     path: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
   register: letsencrypt_cert
-  become: true
   when: use_letsencrypt
 
 - name: Check whether an old Compose file already exists
   ansible.builtin.stat:
     path: "{{ app_dir }}/docker-compose.yml"
   register: existing_compose
-  become: true
   when: use_letsencrypt
 
 - name: Stop existing Nginx before Certbot uses port 80
   ansible.builtin.command: docker compose stop nginx
   args:
     chdir: "{{ app_dir }}"
-  become: true
   when:
     - use_letsencrypt
     - not letsencrypt_cert.stat.exists
@@ -52,7 +46,6 @@
     --non-interactive
     --agree-tos
     -m {{ letsencrypt_email }}
-  become: true
   when:
     - use_letsencrypt
     - not letsencrypt_cert.stat.exists
@@ -63,7 +56,6 @@
     dest: "{{ app_dir }}/certs/fullchain.pem"
     remote_src: true
     mode: "0644"
-  become: true
   when: use_letsencrypt
 
 - name: Copy Let's Encrypt private key
@@ -72,5 +64,4 @@
     dest: "{{ app_dir }}/certs/privkey.pem"
     remote_src: true
     mode: "0600"
-  become: true
   when: use_letsencrypt

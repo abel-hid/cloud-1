@@ -1,30 +1,22 @@
-- name: Update apt cache
-  ansible.builtin.apt:
-    update_cache: true
-    cache_valid_time: 3600
-  become: true
-
 - name: Install packages needed for Docker's apt repository
   ansible.builtin.apt:
     name:
       - ca-certificates
       - curl
     state: present
-  become: true
+    update_cache: true
 
 - name: Create apt keyrings directory
   ansible.builtin.file:
     path: /etc/apt/keyrings
     state: directory
     mode: "0755"
-  become: true
 
 - name: Download Docker's official signing key
   ansible.builtin.get_url:
     url: https://download.docker.com/linux/ubuntu/gpg
     dest: /etc/apt/keyrings/docker.asc
     mode: "0644"
-  become: true
 
 - name: Read Debian package architecture
   ansible.builtin.command: dpkg --print-architecture
@@ -35,7 +27,6 @@
   ansible.builtin.file:
     path: /etc/apt/sources.list.d/docker.list
     state: absent
-  become: true
 
 - name: Configure Docker apt repository
   ansible.builtin.copy:
@@ -48,7 +39,6 @@
       Components: stable
       Architectures: {{ docker_dpkg_arch.stdout }}
       Signed-By: /etc/apt/keyrings/docker.asc
-  become: true
 
 - name: Install Docker Engine and Docker Compose plugin
   ansible.builtin.apt:
@@ -60,11 +50,9 @@
       - docker-compose-plugin
     state: present
     update_cache: true
-  become: true
 
 - name: Ensure Docker service is enabled and running
   ansible.builtin.systemd:
     name: docker
     state: started
     enabled: true
-  become: true
