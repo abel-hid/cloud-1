@@ -39,6 +39,7 @@
     - not letsencrypt_cert.stat.exists
     - existing_compose.stat.exists
 
+# standlone mode is used because the Nginx container is not runnig yet. Certbot will start its own temporary web server.
 - name: Obtain Let's Encrypt certificate
   ansible.builtin.command: >-
     certbot certonly --standalone
