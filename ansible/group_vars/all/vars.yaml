@@ -1,27 +1,18 @@
----
-# Directory on every remote server that contains the generated Compose/Nginx files.
 app_dir: /opt/cloud1
 
-# Portable defaults for a fresh machine. ansible_host normally contains the IP
-# from inventory. A host can override these values directly in inventory.
 domain_name: "{{ ansible_host | default(inventory_hostname) }}"
+
 use_letsencrypt: false
 
-# When Let's Encrypt is disabled, HTTP is the primary URL so a fresh server stays
-# usable without a browser certificate warning. HTTPS is still available with a
-# self-signed certificate.
 site_scheme: "{{ 'https' if use_letsencrypt else 'http' }}"
 
-# Public data, not secrets. Certbot uses this email only when Let's Encrypt is enabled.
 letsencrypt_email: abdeljalilelhidaoui21@gmail.com
 
-# Database names/users are configuration, while passwords come from Ansible Vault.
 mysql_database: wordpress
 mysql_user: wp_user
 mysql_root_password: "{{ vault_mysql_root_password }}"
 mysql_password: "{{ vault_mysql_password }}"
 
-# A minimal WordPress installation is created automatically on the first deploy.
 wordpress_title: Cloud-1
 wordpress_admin_user: cloud1_admin
 wordpress_admin_email: abdeljalilelhidaoui21@gmail.com

@@ -1,1 +1,1 @@
-cd /Users/bel-idri/Desktop/cloud-1-test/ansible && ansible-playbook site.yml --vault-password-file /Users/bel-idri/Desktop/cloud-1-test/PASS.txt
+ansible-playbook site.yml --vault-password-file /home/bel-idri/Desktop/PASS.txt

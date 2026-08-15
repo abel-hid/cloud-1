@@ -1,14 +1,6 @@
----
 - name: Deploy Cloud-1 WordPress stack
   hosts: webserver
   become: true
-
-  # Role order matters:
-  # 1. Docker must exist before Compose commands can run.
-  # 2. The firewall opens only SSH/HTTP/HTTPS.
-  # 3. TLS certificates must exist before Nginx starts with its SSL config.
-  # 4. The WordPress role writes docker-compose.yml and starts the containers.
-  # Ansible executes the same play against hosts in the webserver group in parallel.
   roles:
     - docker
     - firewall

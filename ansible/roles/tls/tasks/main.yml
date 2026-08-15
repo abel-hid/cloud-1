@@ -1,14 +1,10 @@
----
-# Nginx always has certificate files available. On a normal fresh evaluation host
-# we create a self-signed pair; on a host with working public DNS we can request a
-# trusted Let's Encrypt certificate by setting use_letsencrypt=true.
-
-- name: Create application directory before certificates are generated
+- name: Create application directory
   ansible.builtin.file:
     path: "{{ app_dir }}"
     state: directory
     mode: "0755"
   become: true
+  when: use_letsencrypt
 
 - name: Create certificate directory
   ansible.builtin.file:
@@ -16,64 +12,9 @@
     state: directory
     mode: "0755"
   become: true
+  when: use_letsencrypt
 
-- name: Install OpenSSL for self-signed certificates
-  ansible.builtin.apt:
-    name: openssl
-    state: present
-  become: true
-  when: not use_letsencrypt
-
-# --------------------------- Self-signed path ---------------------------
-# stat + when prevents generating a new key/certificate on every Ansible run.
-- name: Check whether self-signed private key exists
-  ansible.builtin.stat:
-    path: "{{ app_dir }}/certs/privkey.pem"
-  register: selfsigned_key
-  become: true
-  when: not use_letsencrypt
-
-- name: Generate self-signed private key once
-  ansible.builtin.command: >-
-    openssl genrsa -out {{ app_dir }}/certs/privkey.pem 2048
-  become: true
-  when: not use_letsencrypt and not selfsigned_key.stat.exists
-
-- name: Protect self-signed private key permissions
-  ansible.builtin.file:
-    path: "{{ app_dir }}/certs/privkey.pem"
-    state: file
-    mode: "0600"
-  become: true
-  when: not use_letsencrypt
-
-- name: Check whether self-signed certificate exists
-  ansible.builtin.stat:
-    path: "{{ app_dir }}/certs/fullchain.pem"
-  register: selfsigned_cert
-  become: true
-  when: not use_letsencrypt
-
-- name: Generate self-signed certificate once
-  ansible.builtin.command: >-
-    openssl req -x509 -new -nodes
-    -key {{ app_dir }}/certs/privkey.pem
-    -out {{ app_dir }}/certs/fullchain.pem
-    -days 365
-    -subj /CN={{ domain_name }}
-  become: true
-  when: not use_letsencrypt and not selfsigned_cert.stat.exists
-
-- name: Set self-signed certificate permissions
-  ansible.builtin.file:
-    path: "{{ app_dir }}/certs/fullchain.pem"
-    state: file
-    mode: "0644"
-  become: true
-  when: not use_letsencrypt
-
-# --------------------------- Let's Encrypt path -------------------------
-- name: Install Certbot when public TLS is enabled
+- name: Install Certbot
   ansible.builtin.apt:
     name: certbot
     state: present
@@ -87,8 +28,6 @@
   become: true
   when: use_letsencrypt
 
-# Certbot standalone needs port 80. On a rerun, an existing Nginx container may
-# already own that port, so we stop only that container before requesting a cert.
 - name: Check whether an old Compose file already exists
   ansible.builtin.stat:
     path: "{{ app_dir }}/docker-compose.yml"
@@ -96,12 +35,10 @@
   become: true
   when: use_letsencrypt
 
-- name: Stop existing Nginx before standalone Certbot uses port 80
+- name: Stop existing Nginx before Certbot uses port 80
   ansible.builtin.command: docker compose stop nginx
   args:
     chdir: "{{ app_dir }}"
-  register: stopped_nginx
-  changed_when: stopped_nginx.rc == 0
   become: true
   when:
     - use_letsencrypt
@@ -116,11 +53,11 @@
     --agree-tos
     -m {{ letsencrypt_email }}
   become: true
-  when: use_letsencrypt and not letsencrypt_cert.stat.exists
+  when:
+    - use_letsencrypt
+    - not letsencrypt_cert.stat.exists
 
-# Nginx reads a stable path under app_dir regardless of which certificate method
-# is selected, so the Compose/Nginx templates stay simple.
-- name: Copy Let's Encrypt certificate into application directory
+- name: Copy Let's Encrypt certificate
   ansible.builtin.copy:
     src: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
     dest: "{{ app_dir }}/certs/fullchain.pem"
@@ -129,7 +66,7 @@
   become: true
   when: use_letsencrypt
 
-- name: Copy Let's Encrypt private key into application directory
+- name: Copy Let's Encrypt private key
   ansible.builtin.copy:
     src: "/etc/letsencrypt/live/{{ domain_name }}/privkey.pem"
     dest: "{{ app_dir }}/certs/privkey.pem"

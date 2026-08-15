@@ -1,7 +1,5 @@
-# This file is rendered by Ansible onto the remote server.
-# Only Nginx publishes host ports; MySQL/PHP services are reachable only on
-# Docker networks, which prevents direct database access from the Internet.
 services:
+
   mysql:
     image: mysql:8.0
     container_name: cloud1_mysql
@@ -12,13 +10,11 @@ services:
       MYSQL_USER: "{{ mysql_user }}"
       MYSQL_PASSWORD: "{{ mysql_password }}"
     volumes:
-      # Named volumes survive container recreation and server reboots.
       - mysql_data:/var/lib/mysql
     networks:
       - backend
 
   wordpress:
-    # FPM contains the PHP runtime only; Nginx is the separate public web server.
     image: wordpress:php8.2-fpm
     container_name: cloud1_wordpress
     restart: unless-stopped
@@ -36,7 +32,6 @@ services:
       - frontend
 
   phpmyadmin:
-    # phpMyAdmin is not published directly. Nginx exposes it only under /phpmyadmin/.
     image: phpmyadmin:5.2
     container_name: cloud1_phpmyadmin
     restart: unless-stopped
@@ -44,7 +39,6 @@ services:
       - mysql
     environment:
       PMA_HOST: mysql
-      # Required because phpMyAdmin is behind Nginx at a sub-path.
       PMA_ABSOLUTE_URI: "{{ site_scheme }}://{{ domain_name }}/phpmyadmin/"
     networks:
       - backend
@@ -58,20 +52,20 @@ services:
       - wordpress
       - phpmyadmin
     ports:
-      # These are the only application ports published on the host.
       - "80:80"
+{% if use_letsencrypt %}
       - "443:443"
+{% endif %}
     volumes:
-      # Nginx needs read-only access to WordPress files for static assets.
       - wordpress_data:/var/www/html:ro
       - {{ app_dir }}/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+{% if use_letsencrypt %}
       - {{ app_dir }}/certs:/etc/nginx/certs:ro
+{% endif %}
     networks:
       - frontend
 
   wpcli:
-    # WP-CLI is a one-shot setup tool, not a permanent process. The "tools"
-    # profile keeps it out of a normal `docker compose up -d`.
     image: wordpress:cli-php8.2
     profiles:
       - tools
@@ -92,7 +86,7 @@ services:
 
 networks:
   frontend:
-  # `internal: true` prevents direct external routing to database-side services.
+
   backend:
     internal: true
 

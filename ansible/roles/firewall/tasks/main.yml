@@ -1,15 +1,9 @@
----
-# UFW is configured with only the three ports allowed by the subject.
-# Docker publishes only 80/443, while MySQL stays on a private Docker network.
-
 - name: Install UFW
   ansible.builtin.apt:
     name: ufw
     state: present
   become: true
 
-# These commands describe the desired policy. Repeating them leaves the same
-# firewall state, which is what matters for idempotent provisioning.
 - name: Deny incoming connections by default
   ansible.builtin.command: ufw default deny incoming
   changed_when: false
@@ -20,8 +14,6 @@
   changed_when: false
   become: true
 
-# UFW itself detects duplicate rules. The changed_when expression keeps Ansible
-# from reporting an existing rule as a new change on the second deployment.
 - name: Allow only SSH, HTTP and HTTPS from outside
   ansible.builtin.command: "ufw allow {{ item }}/tcp"
   loop:
@@ -32,8 +24,6 @@
   changed_when: "'Skipping adding existing rule' not in ufw_rule.stdout"
   become: true
 
-# --force avoids the interactive "may disrupt SSH" prompt. Port 22 is already
-# allowed above, so enabling the firewall does not lock out the deployment user.
 - name: Enable UFW
   ansible.builtin.command: ufw --force enable
   changed_when: false

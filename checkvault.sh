@@ -1,0 +1,1 @@
+ansible-vault view group_vars/all/vault.yml --vault-password-file /home/bel-idri/Desktop/PASS.txt

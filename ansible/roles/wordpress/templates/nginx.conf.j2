@@ -1,66 +1,48 @@
-# With a trusted Let's Encrypt certificate, plain HTTP is redirected to HTTPS.
-# On a portable/self-signed deployment we keep HTTP usable so evaluation does not
-# require accepting a browser warning, while port 443 still serves TLS.
 {% if use_letsencrypt %}
 server {
     listen 80;
     server_name {{ domain_name }};
+
     return 301 https://$host$request_uri;
 }
 {% endif %}
 
 server {
-{% if not use_letsencrypt %}
+{% if use_letsencrypt %}
+    listen 443 ssl;
+{% else %}
     listen 80;
 {% endif %}
-    listen 443 ssl;
+
     server_name {{ domain_name }};
 
+{% if use_letsencrypt %}
     ssl_certificate     /etc/nginx/certs/fullchain.pem;
     ssl_certificate_key /etc/nginx/certs/privkey.pem;
+{% endif %}
 
-    # WordPress files are shared read-only from the named Docker volume.
     root /var/www/html;
     index index.php index.html;
 
-    # WordPress media uploads can be larger than Nginx's very small default limit.
-    client_max_body_size 64M;
-
-    # Normalize /phpmyadmin to /phpmyadmin/ so relative links work consistently.
     location = /phpmyadmin {
         return 301 $scheme://$host/phpmyadmin/;
     }
 
-    # phpMyAdmin has its own container. The trailing slash in proxy_pass removes
-    # the /phpmyadmin/ prefix before the request reaches that container.
     location ^~ /phpmyadmin/ {
         proxy_pass http://phpmyadmin:80/;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Serve a real file/directory when it exists; otherwise let WordPress route
-    # the request through index.php (needed for normal WordPress permalinks).
     location / {
         try_files $uri $uri/ /index.php?$args;
     }
 
-    # PHP is not executed by Nginx itself. Requests are forwarded over the private
-    # Docker network to the WordPress PHP-FPM process on its standard port 9000.
     location ~ \.php$ {
         fastcgi_pass wordpress:9000;
         fastcgi_index index.php;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        # Tell PHP when the original request arrived over TLS.
         fastcgi_param HTTPS $https if_not_empty;
         include fastcgi_params;
-    }
-
-    # Apache-style .ht* files can contain sensitive configuration and must never
-    # be served directly by Nginx.
-    location ~ /\.ht {
-        deny all;
     }
 }
